@@ -22,7 +22,7 @@ python -m venv .venv
 
 :: met a jour pip
 echo.
-echo [INFO] Mise à jour de pip...
+echo [INFO] Mise a jour de pip...
 python -m pip install --upgrade pip
 
 :: installe les dépendances
@@ -30,6 +30,6 @@ pip install customtkinter vgamepad
 
 echo.
 echo ====================================
-echo Environnement initialisé avec succès.
+echo Environnement initialise avec succes.
 echo ====================================
 pause
