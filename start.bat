@@ -14,7 +14,7 @@ call .venv\Scripts\activate.bat
 
 echo.
 echo ===================================
-lanceur de l'application...
+lanceur de l application...
 echo ===================================
 python gui.py
 
