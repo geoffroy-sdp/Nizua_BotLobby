@@ -137,7 +137,7 @@ class MainWindow(QMainWindow):
     # --------------------------------
     def open_lobby(self):
         count = self.spinbox.value()
-        url = "https://merzouz.vercel.app"
+        url = "https://www.xbox.com/en-US/play/launch/call-of-duty-black-ops-6---cross-gen-bundle/9PF528M6CRHQ"
 
         # Réinitialiser si on avait déjà un lobby
         self.lobby_widgets.clear()
