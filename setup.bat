@@ -10,7 +10,7 @@ echo ===================================
 echo.
 
 :: crée un dossier temporaire
-set "TEMP_DIR=%TEMP%\git_pyhton_install"
+set "TEMP_DIR=%TEMP%\git_python_install"
 mkdir "%TEMP_DIR%" >nul 2>&1
 
 :: verifie si python est installé
@@ -48,6 +48,7 @@ echo [INFO] Repository cloned successfully.
 
 :: se deplace dans le dossier du projet
 cd Nizua_BotLobby
+echo [INFO] Navigating to the project directory...
 
 :: Vérifie si python est installé apres l'installation
 where python >nul 2>nul
@@ -75,4 +76,16 @@ echo.
 echo ====================================
 echo Environnement initialise avec succes.
 echo ====================================
+
+::Lancement auto de start.bat
+echo.
+if exist "start.bat" (
+    echo [INFO] Lancement de start.bat...
+    start /B start.bat
+) else (
+    echo [ERREUR] start.bat n'existe pas.
+    pause
+    exit /b 1
+)
+
 pause
