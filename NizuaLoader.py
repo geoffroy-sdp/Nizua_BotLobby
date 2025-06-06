@@ -8,58 +8,47 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import Qt, QUrl, QPropertyAnimation, QEasingCurve, QSize, QTimer
 from PyQt5.QtGui import QFont, QPixmap, QMovie
-
+from gamepad_control import GamepadController
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("NIZUASHOP Interface")
-        self.resize(1000, 700)
+        self.setWindowTitle("NIZUASHOP Interface with Gamepad")
+        self.resize(1000, 800)
 
-        # --- État global ---
         self.dark_mode = True
-        self.lobby_widgets = []        # liste des QWebEngineView du lobby
-        self.remaining_loads = 0       # compteur de chargements restants
+        self.controllers = []
+        self.controller_connected = False
+        self.browser_urls = []
+        self.launch_url = "https://www.xbox.com/en-US/play/launch/call-of-duty-black-ops-6---cross-gen-bundle/9PF528M6CRHQ"
 
-        # --- Onglets en haut : Menu / Lobby / Settings ---
         self.tabs = QTabWidget()
-        self.tabs.setTabPosition(QTabWidget.North)
         self.setCentralWidget(self.tabs)
 
-        # --- Onglet Menu ---
         self.menu_tab = QWidget()
         self._build_menu_tab()
         self.tabs.addTab(self.menu_tab, "Menu")
 
-        # --- Onglet Lobby (initialement vide, on désactive) ---
         self.lobby_tab = QWidget()
         self.tabs.addTab(self.lobby_tab, "Lobby")
         self.tabs.setTabEnabled(1, False)
 
-        # --- Onglet Settings (exemple) ---
         self.settings_tab = QWidget()
         self._build_settings_tab()
         self.tabs.addTab(self.settings_tab, "Settings")
 
-        # Appliquer le style initial (mode Nuit)
         self.apply_stylesheet()
 
-    # ------------------------------
-    # Construction de l’onglet Menu
-    # ------------------------------
     def _build_menu_tab(self):
         layout = QVBoxLayout()
         layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-        layout.setSpacing(20)
+        layout.setSpacing(15)
 
-        # → Logo + Titre “NIZUASHOP”
         logo_layout = QHBoxLayout()
         logo_layout.setAlignment(Qt.AlignCenter)
         logo = QLabel()
         pixmap = QPixmap("nizua_logo.png")
-        logo.setPixmap(
-            pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        )
+        logo.setPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setStyleSheet("margin-right: 10px;")
         title = QLabel("NIZUASHOP")
         title.setFont(QFont("Orbitron", 32, QFont.Bold))
@@ -68,7 +57,6 @@ class MainWindow(QMainWindow):
         logo_layout.addWidget(title)
         layout.addLayout(logo_layout)
 
-        # → Choix du nombre de tabs (1 à 20)
         hbox = QHBoxLayout()
         hbox.setAlignment(Qt.AlignCenter)
         lbl = QLabel("Nombre de tabs :")
@@ -83,14 +71,46 @@ class MainWindow(QMainWindow):
         hbox.addWidget(spin)
         layout.addLayout(hbox)
 
-        # → Bouton “Open Lobby” animé
-        btn_open = QPushButton("🚀 Open Lobby")
+        btn_open = QPushButton("📂 Ouvrir Lobby")
         btn_open.setFixedSize(220, 50)
         btn_open.setObjectName("neonButton")
-        btn_open.clicked.connect(self.animate_and_open_lobby)
+        btn_open.clicked.connect(self.open_lobby)
         layout.addWidget(btn_open, alignment=Qt.AlignCenter)
 
-        # → Toggle Jour / Nuit
+        btn_launch = QPushButton("🚀 Launch BO6")
+        btn_launch.setFixedSize(220, 50)
+        btn_launch.setObjectName("neonButton")
+        btn_launch.clicked.connect(self.launch_bo6)
+        layout.addWidget(btn_launch, alignment=Qt.AlignCenter)
+
+        btn_connect = QPushButton("🎮 Connect Controllers")
+        btn_connect.setFixedSize(220, 50)
+        btn_connect.setObjectName("neonButton")
+        btn_connect.clicked.connect(self.connect_controller)
+        self.btn_connect = btn_connect
+        layout.addWidget(btn_connect, alignment=Qt.AlignCenter)
+
+        btn_movement = QPushButton("🕹️ Enable Mouvement")
+        btn_movement.setFixedSize(220, 50)
+        btn_movement.setObjectName("neonButton")
+        btn_movement.clicked.connect(self.toggle_movement)
+        self.btn_movement = btn_movement
+        layout.addWidget(btn_movement, alignment=Qt.AlignCenter)
+
+        btn_antiafk = QPushButton("⏱️ Anti-AFK")
+        btn_antiafk.setFixedSize(220, 50)
+        btn_antiafk.setObjectName("neonButton")
+        btn_antiafk.clicked.connect(self.toggle_anti_afk)
+        self.btn_antiafk = btn_antiafk
+        layout.addWidget(btn_antiafk, alignment=Qt.AlignCenter)
+
+        btn_class = QPushButton("🔧 Select Class")
+        btn_class.setFixedSize(220, 50)
+        btn_class.setObjectName("neonButton")
+        btn_class.clicked.connect(self.select_class)
+        self.btn_class = btn_class
+        layout.addWidget(btn_class, alignment=Qt.AlignCenter)
+
         btn_toggle = QPushButton("🌗 Mode Jour")
         btn_toggle.setFixedSize(140, 40)
         btn_toggle.setObjectName("toggleButton")
@@ -100,75 +120,63 @@ class MainWindow(QMainWindow):
 
         self.menu_tab.setLayout(layout)
 
-    # --------------------------------
-    # Animation puis ouverture Lobby
-    # --------------------------------
-    def animate_and_open_lobby(self):
-        btn = self.sender()
-        effect = QGraphicsOpacityEffect(btn)
-        btn.setGraphicsEffect(effect)
-        anim = QPropertyAnimation(effect, b"opacity", self)
-        anim.setDuration(400)
-        anim.setStartValue(1.0)
-        anim.setEndValue(0.4)
-        anim.setEasingCurve(QEasingCurve.InOutQuad)
-        anim.finished.connect(lambda: (effect.setOpacity(1.0), self.open_lobby()))
-        anim.start()
+    def connect_controller(self):
+        self.controllers.clear()
+        count = self.spinbox.value()
 
-    # ------------------------------
-    # Bascule Jour / Nuit
-    # ------------------------------
-    def toggle_day_night(self):
-        self.dark_mode = not self.dark_mode
-        if self.dark_mode:
-            self.btn_toggle.setText("🌗 Mode Jour")
-        else:
-            self.btn_toggle.setText("🌙 Mode Nuit")
-        self.apply_stylesheet()
+        for i in range(count):
+            ctrl = GamepadController()
+            if ctrl.connect():
+                ctrl.start()
+                self.controllers.append(ctrl)
+            else:
+                print(f"❌ Gamepad {i+1} failed to connect")
 
-    def apply_stylesheet(self):
-        if self.dark_mode:
-            self.setStyleSheet(self.dark_stylesheet())
-        else:
-            self.setStyleSheet(self.light_stylesheet())
+        self.controller_connected = bool(self.controllers)
+        self.btn_connect.setText(f"✅ {len(self.controllers)} Controller(s) Ready" if self.controller_connected else "❌ Connection Failed")
 
-    # --------------------------------
-    # Création / rafraîchissement Lobby
-    # --------------------------------
+    def toggle_movement(self):
+        if not self.controller_connected:
+            self.btn_movement.setText("⚠️ Connect First")
+            return
+        enabled = not self.controllers[0].movement_enabled
+        for ctrl in self.controllers:
+            ctrl.movement_enabled = enabled
+        self.btn_movement.setText("🚫 Disable Mouvement" if enabled else "🕹️ Enable Mouvement")
+
+    def toggle_anti_afk(self):
+        if not self.controller_connected:
+            self.btn_antiafk.setText("⚠️ Connect First")
+            return
+        enabled = not self.controllers[0].anti_afk_enabled
+        for ctrl in self.controllers:
+            if enabled:
+                ctrl.toggle_anti_afk()
+            else:
+                ctrl.anti_afk_enabled = False
+        self.btn_antiafk.setText("🚫 Disable Anti-AFK" if enabled else "⏱️ Anti-AFK")
+
+    def select_class(self):
+        if not self.controller_connected:
+            self.btn_class.setText("⚠️ Connect First")
+            return
+        for ctrl in self.controllers:
+            ctrl.select_class()
+        self.btn_class.setText("✅ Class Selected")
+
+    def launch_bo6(self):
+        for browser in self.browser_urls:
+            browser.setUrl(QUrl(self.launch_url))
+
     def open_lobby(self):
         count = self.spinbox.value()
-        url = "https://www.xbox.com/en-US/play/launch/call-of-duty-black-ops-6---cross-gen-bundle/9PF528M6CRHQ"
+        initial_url = "https://www.xbox.com/en-US/play/launch/call-of-duty-black-ops-6---cross-gen-bundle/"
+        self.browser_urls = []
 
-        # Réinitialiser si on avait déjà un lobby
-        self.lobby_widgets.clear()
-        self.remaining_loads = count
-
-        # --- Construction de l’onglet Lobby ---
         container = QWidget()
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
         container.setLayout(main_layout)
 
-        # 1) Overlay Loader animé
-        loader_overlay = QWidget(container)
-        loader_overlay.setObjectName("loaderOverlay")
-        loader_overlay.setGeometry(0, 0, self.width(), self.height())
-        loader_overlay.setAttribute(Qt.WA_StyledBackground, True)
-
-        loader_label = QLabel(loader_overlay)
-        loader_label.setObjectName("loaderLabel")
-        loader_label.setAlignment(Qt.AlignCenter)
-        movie = QMovie("loader.gif")
-        loader_label.setMovie(movie)
-        movie.start()
-        loader_label.setFixedSize(200, 200)
-        loader_label.move(
-            (self.width() - loader_label.width()) // 2,
-            (self.height() - loader_label.height()) // 2,
-        )
-
-        # 2) Grille de QSplitter redimensionnables
         cols = min(count, 5)
         rows = ceil(count / cols)
         root_splitter = QSplitter(Qt.Vertical)
@@ -179,239 +187,90 @@ class MainWindow(QMainWindow):
             row_splitter = QSplitter(Qt.Horizontal)
             row_splitter.setHandleWidth(5)
             this_row = min(cols, count - idx)
-            for c in range(this_row):
+            for _ in range(this_row):
                 browser = QWebEngineView()
-                browser.setUrl(QUrl(url))
-                browser.setMinimumSize(QSize(200, 112))  # ratio 16:9 mini
-                browser.loadFinished.connect(lambda ok, ov=loader_overlay: self.on_tab_loaded(ov))
-                self.lobby_widgets.append(browser)
+                browser.setFixedSize(QSize(640, 360))
+                browser.setUrl(QUrl(initial_url))
+                self.browser_urls.append(browser)
                 row_splitter.addWidget(browser)
                 idx += 1
-
-            # Si moins de 5 colonnes, ajouter des "spacers" transparents
-            if this_row < cols:
-                for _ in range(cols - this_row):
-                    spacer = QWidget()
-                    spacer.setStyleSheet("background: transparent;")
-                    row_splitter.addWidget(spacer)
-
             root_splitter.addWidget(row_splitter)
 
-        # Ajouter le splitter dans un QScrollArea (scroll si > hauteur)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(root_splitter)
         main_layout.addWidget(scroll)
 
-        # 3) Bouton “Retour au menu”
         btn_back = QPushButton("🔙 Retour au menu")
         btn_back.setFixedSize(180, 45)
         btn_back.setObjectName("backButton")
         btn_back.clicked.connect(self.go_back_to_menu)
-        main_layout.addWidget(btn_back, alignment=Qt.AlignHCenter | Qt.AlignBottom)
+        main_layout.addWidget(btn_back, alignment=Qt.AlignHCenter)
 
-        # Remplacer l’onglet Lobby
         self.tabs.removeTab(1)
         self.lobby_tab = container
         self.tabs.insertTab(1, self.lobby_tab, "Lobby")
         self.tabs.setTabEnabled(1, True)
         self.tabs.setCurrentIndex(1)
 
-        # Replacer l’overlay Loader au-dessus, après que tout ait été layouté
-        QTimer.singleShot(100, lambda: loader_overlay.raise_())
-
-    # --------------------------------
-    # Callback quand chaque tab est chargée
-    # --------------------------------
-    def on_tab_loaded(self, overlay: QWidget):
-        self.remaining_loads -= 1
-        if self.remaining_loads <= 0:
-            # Tous les onglets ont fini de charger → on fait disparaître le loader
-            anim = QPropertyAnimation(overlay, b"windowOpacity", self)
-            anim.setDuration(500)
-            anim.setStartValue(1.0)
-            anim.setEndValue(0.0)
-            anim.setEasingCurve(QEasingCurve.InOutQuad)
-            anim.finished.connect(overlay.hide)
-            anim.start()
-
-    # ----------------------------
-    # Retour au Menu depuis Lobby
-    # ----------------------------
     def go_back_to_menu(self):
-        # Désactiver l’onglet Lobby et revenir à Menu
         self.tabs.setCurrentIndex(0)
         self.tabs.setTabEnabled(1, False)
-        # On pourra remplacer complètement l’onglet Lobby à la prochaine ouverture
 
-    # --------------------------------
-    # Contenu de l’onglet Settings
-    # --------------------------------
+    def toggle_day_night(self):
+        self.dark_mode = not self.dark_mode
+        self.btn_toggle.setText("🌗 Mode Jour" if self.dark_mode else "🌙 Mode Nuit")
+        self.apply_stylesheet()
+
+    def apply_stylesheet(self):
+        if self.dark_mode:
+            self.setStyleSheet(self.dark_stylesheet())
+        else:
+            self.setStyleSheet(self.light_stylesheet())
+
     def _build_settings_tab(self):
         layout = QFormLayout()
         layout.setSpacing(20)
         lbl_theme = QLabel("Thème personnalisé :")
         line_theme = QLineEdit("#ff0040")
         layout.addRow(lbl_theme, line_theme)
-
-        lbl_info = QLabel(
-            "Ici, vous pouvez ajouter vos paramètres.\n"
-            "Exemple : config d’URL, clés API, etc."
-        )
+        lbl_info = QLabel("Ajouter vos paramètres ici (API, URL, etc.)")
         lbl_info.setWordWrap(True)
         layout.addRow(lbl_info)
         self.settings_tab.setLayout(layout)
 
-    # --------------------------------
-    # Stylesheet Mode Nuit (futuriste)
-    # --------------------------------
     def dark_stylesheet(self):
         return """
-        QWidget {
-            background-color: #0d0d0d;
-            color: #e0e0e0;
-            font-family: 'Segoe UI', sans-serif;
-        }
+        QWidget { background-color: #0d0d0d; color: #e0e0e0; font-family: 'Segoe UI'; }
         QLabel#titleLabel {
-            color: qlineargradient(
-                x1:0, y1:0, x2:1, y2:1,
-                stop:0 #ff0040, stop:0.5 #aa00ff, stop:1 #0040ff
-            );
-        }
-        QLabel#plainLabel {
-            color: #cccccc;
-            font-size: 16px;
-        }
-        QSpinBox#spinBox {
-            background-color: #1a1a1a;
-            color: #f0f0f0;
-            border: 2px solid #6f00ff;
-            border-radius: 5px;
-            padding: 4px;
-        }
-        QSpinBox#spinBox::up-button, QSpinBox#spinBox::down-button {
-            width: 16px; height: 16px;
-        }
+            color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #ff0040, stop:0.5 #aa00ff, stop:1 #0040ff); }
         QPushButton#neonButton {
-            background-color: #6f00ff;
-            color: white;
-            font-size: 16px;
-            border: 2px solid #ff0040;
-            border-radius: 8px;
-            padding: 8px;
-        }
-        QPushButton#neonButton:hover {
-            background-color: #ff0040;
-            border: 2px solid #aa00ff;
-        }
-        QPushButton#neonButton:pressed {
-            background-color: #aa00ff;
-            border: 2px solid #0040ff;
-        }
-        QPushButton#toggleButton {
-            background-color: #222222;
-            color: #ffcc00;
-            font-size: 14px;
-            border: 1px solid #ffcc00;
-            border-radius: 6px;
-            padding: 6px;
-        }
-        QPushButton#toggleButton:hover {
-            background-color: #333333;
-        }
+            background-color: #6f00ff; color: white;
+            font-size: 16px; border: 2px solid #ff0040;
+            border-radius: 8px; padding: 8px; }
+        QPushButton#neonButton:hover { background-color: #ff0040; }
         QPushButton#backButton {
-            background-color: #880808;
-            color: white;
-            font-size: 14px;
-            border: 2px solid #ff0040;
-            border-radius: 6px;
-            padding: 6px;
-        }
-        QPushButton#backButton:hover {
-            background-color: #aa0000;
-        }
-        QWidget#loaderOverlay {
-            background-color: rgba(10, 10, 10, 0.85);
-        }
-        QLabel#loaderLabel {
-            border: none;
-        }
+            background-color: #880808; color: white;
+            border: 2px solid #ff0040; border-radius: 6px; padding: 6px; }
+        QPushButton#backButton:hover { background-color: #aa0000; }
         """
 
-    # --------------------------------
-    # Stylesheet Mode Jour (futuriste clair)
-    # --------------------------------
     def light_stylesheet(self):
         return """
-        QWidget {
-            background-color: #f2f2f2;
-            color: #202020;
-            font-family: 'Segoe UI', sans-serif;
-        }
+        QWidget { background-color: #f2f2f2; color: #202020; font-family: 'Segoe UI'; }
         QLabel#titleLabel {
-            color: qlineargradient(
-                x1:0, y1:0, x2:1, y2:1,
-                stop:0 #ff0040, stop:0.5 #aa00ff, stop:1 #0040ff
-            );
-        }
-        QLabel#plainLabel {
-            color: #202020;
-            font-size: 16px;
-        }
-        QSpinBox#spinBox {
-            background-color: #ffffff;
-            color: #202020;
-            border: 2px solid #0040ff;
-            border-radius: 5px;
-            padding: 4px;
-        }
-        QSpinBox#spinBox::up-button, QSpinBox#spinBox::down-button {
-            width: 16px; height: 16px;
-        }
+            color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #ff0040, stop:0.5 #aa00ff, stop:1 #0040ff); }
         QPushButton#neonButton {
-            background-color: #aa00ff;
-            color: white;
-            font-size: 16px;
-            border: 2px solid #0040ff;
-            border-radius: 8px;
-            padding: 8px;
-        }
-        QPushButton#neonButton:hover {
-            background-color: #0040ff;
-            border: 2px solid #ff0040;
-        }
-        QPushButton#neonButton:pressed {
-            background-color: #ff0040;
-            border: 2px solid #aa00ff;
-        }
-        QPushButton#toggleButton {
-            background-color: #dddddd;
-            color: #aa00ff;
-            font-size: 14px;
-            border: 1px solid #aa00ff;
-            border-radius: 6px;
-            padding: 6px;
-        }
-        QPushButton#toggleButton:hover {
-            background-color: #cccccc;
-        }
+            background-color: #aa00ff; color: white;
+            font-size: 16px; border: 2px solid #0040ff;
+            border-radius: 8px; padding: 8px; }
+        QPushButton#neonButton:hover { background-color: #0040ff; }
         QPushButton#backButton {
-            background-color: #ff3366;
-            color: white;
-            font-size: 14px;
-            border: 2px solid #aa00ff;
-            border-radius: 6px;
-            padding: 6px;
-        }
-        QPushButton#backButton:hover {
-            background-color: #ff5588;
-        }
-        QWidget#loaderOverlay {
-            background-color: rgba(255, 255, 255, 0.85);
-        }
-        QLabel#loaderLabel {
-            border: none;
-        }
+            background-color: #ff3366; color: white;
+            border: 2px solid #aa00ff; border-radius: 6px; padding: 6px; }
+        QPushButton#backButton:hover { background-color: #ff5588; }
         """
 
 if __name__ == "__main__":
